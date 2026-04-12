@@ -383,6 +383,13 @@ footer span strong { color: var(--text); font-weight: 500; }
       </div>
       <div id="autoPixelInfo" style="display:none">
         <div class="auto-detect-result" id="autoDetectResult">加载图片后自动检测</div>
+        <label style="margin-top:8px">采样方式
+          <select id="sampleMethodSelect" style="margin-left:8px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font)">
+            <option value="majority" selected>多数决定 (Majority)</option>
+            <option value="center">中心采样 (Center)</option>
+            <option value="median">中位数 (Median)</option>
+          </select>
+        </label>
       </div>
       <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
       <div class="btn-row">
@@ -467,6 +474,7 @@ const S = {
   blockSize: 8,
   pixelOn: false,        // master toggle: is pixelation enabled?
   autoPixel: false,      // sub-toggle: use smart detection?
+  sampleMethod: 'majority', // 'majority' | 'center' | 'median'
   prePixelData: null,    // ImageData snapshot before apply
   detectedGrid: null,    // PerfectPixel result cache
   // sprite
@@ -822,6 +830,11 @@ function setupTools() {
   });
   $('applyPixelBtn').addEventListener('click', applyPixelate);
   $('resetPixelBtn').addEventListener('click', resetPixelate);
+  $('sampleMethodSelect').addEventListener('change', e => {
+    S.sampleMethod = e.target.value;
+    S.detectedGrid = null;
+    if (S.pixelOn && S.autoPixel && S.imgW) computePixel();
+  });
 
   // sprite
   $('spriteCols').addEventListener('input', () => {
@@ -1113,7 +1126,7 @@ function computePixel() {
     // Smart detection via PerfectPixel library
     if (!S.detectedGrid) {
       const imageData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
-      const result = PerfectPixel.getPerfectPixel(imageData, { sampleMethod: 'majority' });
+      const result = PerfectPixel.getPerfectPixel(imageData, { sampleMethod: S.sampleMethod });
       if (!result) {
         S.detectedGrid = null;
         $('autoDetectResult').innerHTML = '<span style="color:#e55">检测失败：未能识别像素网格</span>';
