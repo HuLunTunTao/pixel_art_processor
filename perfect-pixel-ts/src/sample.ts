@@ -109,18 +109,21 @@ export function sampleMajority(
       x1 = Math.max(0, Math.min(w, x1));
       if (x1 <= x0) x1 = Math.min(x0 + 1, w);
 
-      // Collect cell pixels, skipping transparent ones
+      // Collect cell pixels, skipping fully transparent ones
       const cellW = x1 - x0;
       const cellH = y1 - y0;
-      const cellBuf = new Float32Array(cellW * cellH * 3);
+      const totalPixels = cellW * cellH;
+      const cellBuf = new Float32Array(totalPixels * 3);
+      const alphaBuf = new Float32Array(totalPixels);
       let n = 0;
       for (let sy = y0; sy < y1; sy++) {
         for (let sx = x0; sx < x1; sx++) {
           const si = (sy * w + sx) * 4;
-          if (data[si + 3] === 0) continue; // skip transparent
+          if (data[si + 3] === 0) continue; // skip fully transparent
           cellBuf[n * 3] = data[si];
           cellBuf[n * 3 + 1] = data[si + 1];
           cellBuf[n * 3 + 2] = data[si + 2];
+          alphaBuf[n] = data[si + 3];
           n++;
         }
       }
@@ -132,6 +135,9 @@ export function sampleMajority(
         out[di + 3] = 0;
         continue;
       }
+
+      // Keep original count for alpha calculation
+      const opaqueCount = n;
 
       // Subsample if too many
       if (n > maxSamples) {
@@ -194,7 +200,10 @@ export function sampleMajority(
         out[di + 1] = Math.round(Math.max(0, Math.min(255, c0g)));
         out[di + 2] = Math.round(Math.max(0, Math.min(255, c0b)));
       }
-      out[di + 3] = 255;
+      // Alpha: proportion of non-transparent pixels × average alpha
+      let alphaSum = 0;
+      for (let p = 0; p < opaqueCount; p++) alphaSum += alphaBuf[p];
+      out[di + 3] = Math.round(Math.min(255, alphaSum / totalPixels));
     }
   }
   return out;
