@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片处理工具</title>
+<style>
+:root {
+  --bg: #1e1e1e;
+  --sidebar-bg: #252526;
+  --header-bg: #2d2d2d;
+  --panel-bg: #2d2d2d;
+  --border: #3e3e3e;
+  --text: #cccccc;
+  --text-dim: #888888;
+  --accent: #4a9eff;
+  --accent-hover: #5aafff;
+  --danger: #e55;
+  --danger-hover: #f66;
+  --success: #4caf50;
+  --radius: 6px;
+  --font: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 48px 1fr 28px;
+  grid-template-columns: 260px 1fr;
+  grid-template-areas: "header header" "sidebar main" "footer footer";
+  overflow: hidden;
+  user-select: none;
+}
+header {
+  grid-area: header;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+}
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
+header button {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font);
+  transition: background 0.15s;
+}
+header button:hover { background: #3a3a3a; }
+header button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+header button.primary:hover { background: var(--accent-hover); }
+.bg-picker {
+  display: flex; align-items: center; gap: 6px; margin-right: auto;
+  font-size: 13px; color: var(--text-dim);
+}
+.bg-picker input[type="color"] {
+  width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 4px;
+  background: none; cursor: pointer; padding: 0;
+}
+.bg-picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+.bg-picker input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+.bg-picker button {
+  width: 22px; height: 22px; padding: 0; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--panel-bg); color: var(--text-dim);
+  cursor: pointer; font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.bg-picker button:hover { background: #3a3a3a; color: var(--text); }
+aside {
+  grid-area: sidebar;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab-bar button {
+  flex: 1;
+  padding: 10px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab-bar button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.tab-bar button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.panel { display: none; padding: 16px; flex-direction: column; gap: 12px; }
+.panel.active { display: flex; }
+.panel label { font-size: 13px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; }
+.panel label span { color: var(--text); font-weight: 500; }
+.panel input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin-top: 4px;
+}
+.panel input[type="number"] {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
+}
+.panel .btn {
+  padding: 7px 12px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: var(--accent-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-secondary { background: #3a3a3a; color: var(--text); }
+.btn-secondary:hover { background: #444; }
+.panel .hint { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.panel .info { font-size: 13px; color: var(--accent); font-weight: 500; }
+.color-swatch-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+.color-swatch {
+  width: 32px; height: 32px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+}
+.color-swatch-label { font-size: 13px; color: var(--text); }
+.selected-count { font-size: 12px; color: var(--text-dim); }
+.btn-row { display: flex; gap: 8px; }
+.btn-row .btn { flex: 1; }
+.dim-display {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 8px 12px;
+  background: rgba(74,158,255,0.08);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.input-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.input-row label { flex: 1; font-size: 13px; color: var(--text-dim); }
+.input-row input[type="number"] { width: 60px; }
+section.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+.canvas-wrap canvas {
+  position: absolute;
+  top: 0; left: 0;
+}
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 15px;
+  gap: 12px;
+  pointer-events: none;
+}
+.empty-state.hidden { display: none; }
+.drop-hint {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 40px 60px;
+  text-align: center;
+}
+.drag-over { background: rgba(74,158,255,0.05); }
+.drag-over .drop-hint { border-color: var(--accent); color: var(--accent); }
+.sprite-panel {
+  border-top: 1px solid var(--border);
+  background: var(--panel-bg);
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px;
+  display: none;
+}
+.sprite-panel.active { display: block; }
+.sprite-panel-top {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.anim-player {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.anim-player canvas {
+  display: block;
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  background-image:
+    linear-gradient(45deg, #333 25%, transparent 25%),
+    linear-gradient(-45deg, #333 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #333 75%),
+    linear-gradient(-45deg, transparent 75%, #333 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  background-color: #2a2a2a;
+}
+.sprite-panel-right {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.frame-info {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 2px;
+}
+.sprite-panel-header {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.sprite-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sprite-cell {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  background-image:
+    linear-gradient(45deg, #333 25%, transparent 25%),
+    linear-gradient(-45deg, #333 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #333 75%),
+    linear-gradient(-45deg, transparent 75%, #333 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: #2a2a2a;
+  position: relative;
+  overflow: hidden;
+}
+.sprite-cell:hover { border-color: var(--accent); }
+.sprite-cell.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.sprite-cell canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+}
+footer {
+  grid-area: footer;
+  background: var(--header-bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 24px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+footer span strong { color: var(--text); font-weight: 500; }
+#fileInput { display: none; }
+.separator { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>图片处理工具</h1>
+  <label class="bg-picker"><span>预览背景</span><input type="color" id="bgColorInput" value="#000000"><button id="bgResetBtn" title="恢复棋盘格">✕</button></label>
+  <button id="uploadBtn">上传图片</button>
+  <button id="exportBtn">导出 PNG</button>
+  <input type="file" id="fileInput" accept="image/*">
+</header>
+
+<aside>
+  <div class="tab-bar">
+    <button class="active" data-tab="cutout">取色删除</button>
+    <button data-tab="eraser">恢复</button>
+    <button data-tab="pixel">像素化</button>
+    <button data-tab="sprite">精灵图</button>
+  </div>
+
+  <div id="cutoutPanel" class="panel active">
+    <div class="hint">点击图片选取颜色，相似颜色将被标记</div>
+    <div class="color-swatch-row">
+      <div class="color-swatch" id="colorSwatch"></div>
+      <div class="color-swatch-label" id="colorLabel">未选取</div>
+    </div>
+    <label>相似阈值 <span id="thresholdVal">30</span></label>
+    <input type="range" id="thresholdSlider" min="0" max="100" value="30">
+    <div class="selected-count" id="selectedCount"></div>
+    <div class="btn-row">
+      <button class="btn btn-danger" id="deleteBtn">删除选中</button>
+      <button class="btn btn-secondary" id="clearSelBtn">清除选区</button>
+    </div>
+  </div>
+
+  <div id="eraserPanel" class="panel">
+    <div class="hint">在画布上拖动，恢复已删除的像素</div>
+    <label>笔刷大小 <span id="brushVal">15</span></label>
+    <input type="range" id="brushSlider" min="1" max="100" value="15">
+  </div>
+
+  <div id="pixelPanel" class="panel">
+    <div class="hint">将图片转换为像素风格</div>
+    <label>像素块大小 <span id="blockVal">8</span></label>
+    <input type="range" id="blockSlider" min="2" max="64" value="8">
+    <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
+    <div class="btn-row">
+      <button class="btn btn-accent" id="applyPixelBtn">应用像素化</button>
+      <button class="btn btn-secondary" id="resetPixelBtn">撤销像素化</button>
+    </div>
+  </div>
+
+  <div id="spritePanel" class="panel">
+    <div class="hint">设置精灵图网格并预览各帧</div>
+    <div class="input-row">
+      <label>列数 (宽)</label>
+      <input type="number" id="spriteCols" min="1" max="64" value="4">
+    </div>
+    <div class="input-row">
+      <label>行数 (高)</label>
+      <input type="number" id="spriteRows" min="1" max="64" value="4">
+    </div>
+    <div class="dim-display" id="spriteDim">每格尺寸: -- x -- px</div>
+    <div class="input-row">
+      <label>FPS</label>
+      <input type="number" id="animFps" min="1" max="60" value="8">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="prevFrameBtn">◀</button>
+      <button class="btn btn-accent" id="playBtn">▶ 播放</button>
+      <button class="btn btn-secondary" id="nextFrameBtn">▶</button>
+    </div>
+    <div class="frame-info" id="frameInfo">帧: --/--</div>
+  </div>
+</aside>
+
+<section class="main">
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="mainCanvas"></canvas>
+    <div class="empty-state" id="emptyState">
+      <div class="drop-hint">拖拽图片到此处，或点击「上传图片」</div>
+    </div>
+  </div>
+  <div class="sprite-panel" id="spritePreviewPanel">
+    <div class="sprite-panel-top">
+      <div class="anim-player" id="animPlayer">
+        <canvas id="animCanvas"></canvas>
+      </div>
+      <div class="sprite-panel-right">
+        <div class="sprite-panel-header" id="spriteHeader">精灵帧预览</div>
+        <div class="sprite-grid" id="spriteGrid"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span id="infoSize">尺寸: --</span>
+  <div class="separator"></div>
+  <span id="infoPos">坐标: --</span>
+  <div class="separator"></div>
+  <span id="infoColor">颜色: --</span>
+  <div class="separator"></div>
+  <span id="infoZoom">缩放: 100%</span>
+</footer>
+
+<script>
+// ============================================================
+//  State
+// ============================================================
+const S = {
+  tab: 'cutout',
+  imgW: 0, imgH: 0,
+  zoom: 1, panX: 0, panY: 0,
+  // cutout
+  selColor: null,    // {r,g,b}
+  threshold: 30,
+  distances: null,   // Float32Array
+  mask: null,        // Uint8Array
+  selCount: 0,
+  // eraser
+  brushSize: 15,
+  drawing: false,
+  // pixel
+  blockSize: 8,
+  pixelPreview: false,
+  prePixelData: null, // ImageData snapshot before apply
+  // sprite
+  cols: 4, rows: 4,
+  // animation
+  animPlaying: false,
+  animFrame: 0,
+  animFps: 8,
+  animTimer: null,
+  // mouse
+  mouseX: 0, mouseY: 0, mouseIn: false,
+  // preview background
+  bgColor: null,  // null = checkerboard, string = solid color
+};
+
+// ============================================================
+//  DOM refs
+// ============================================================
+const $ = id => document.getElementById(id);
+const mainCanvas = $('mainCanvas');
+const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
+const wrap = $('canvasWrap');
+
+// Off-screen canvases
+const origCanvas = document.createElement('canvas');
+const origCtx = origCanvas.getContext('2d', { willReadFrequently: true });
+const workCanvas = document.createElement('canvas');
+const workCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+const overlayCanvas = document.createElement('canvas');
+const overlayCtx = overlayCanvas.getContext('2d');
+const pixCanvas = document.createElement('canvas');
+const pixCtx = pixCanvas.getContext('2d');
+
+let checkerPattern = null;
+
+// ============================================================
+//  Init
+// ============================================================
+function init() {
+  resizeMain();
+  window.addEventListener('resize', resizeMain);
+  setupTabs();
+  setupUpload();
+  setupTools();
+  setupCanvasEvents();
+  render();
+}
+
+function resizeMain() {
+  const r = wrap.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return;
+  mainCanvas.width = r.width;
+  mainCanvas.height = r.height;
+  checkerPattern = null;
+  render();
+}
+new ResizeObserver(resizeMain).observe(wrap);
+
+// ============================================================
+//  Tabs
+// ============================================================
+function setupTabs() {
+  document.querySelectorAll('.tab-bar button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      S.tab = btn.dataset.tab;
+      $(S.tab + 'Panel').classList.add('active');
+      S.pixelPreview = (S.tab === 'pixel');
+      const sp = $('spritePreviewPanel');
+      if (S.tab === 'sprite') {
+        sp.classList.add('active');
+        updateSpritePreview();
+      } else {
+        sp.classList.remove('active');
+        stopAnim();
+      }
+      if (S.tab === 'pixel' && S.imgW) {
+        updatePixelPreview();
+      }
+      render();
+    });
+  });
+}
+
+// ============================================================
+//  Upload
+// ============================================================
+function setupUpload() {
+  $('uploadBtn').addEventListener('click', () => $('fileInput').click());
+  $('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) loadImage(e.target.files[0]);
+  });
+  // drag-drop
+  wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('drag-over'); });
+  wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'));
+  wrap.addEventListener('drop', e => {
+    e.preventDefault();
+    wrap.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) loadImage(f);
+  });
+  // export
+  $('exportBtn').addEventListener('click', exportImage);
+  // preview background color
+  $('bgColorInput').addEventListener('input', e => {
+    S.bgColor = e.target.value;
+    applyBgColor();
+  });
+  $('bgResetBtn').addEventListener('click', () => {
+    S.bgColor = null;
+    applyBgColor();
+  });
+}
+
+function applyBgColor() {
+  // Update CSS backgrounds for sprite cells and anim canvas
+  const val = S.bgColor;
+  const animCv = $('animCanvas');
+  const cells = document.querySelectorAll('.sprite-cell');
+  if (val) {
+    animCv.style.background = val;
+    cells.forEach(c => c.style.background = val);
+  } else {
+    animCv.style.background = '';
+    cells.forEach(c => c.style.background = '');
+  }
+  // Re-render sprite cell canvases and anim frame with new bg
+  if (S.tab === 'sprite' && S.imgW) updateSpritePreview();
+  render();
+}
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      S.imgW = img.width;
+      S.imgH = img.height;
+      // setup offscreen canvases
+      [origCanvas, workCanvas, overlayCanvas].forEach(c => { c.width = S.imgW; c.height = S.imgH; });
+      origCtx.clearRect(0, 0, S.imgW, S.imgH);
+      origCtx.drawImage(img, 0, 0);
+      workCtx.clearRect(0, 0, S.imgW, S.imgH);
+      workCtx.drawImage(img, 0, 0);
+      overlayCtx.clearRect(0, 0, S.imgW, S.imgH);
+      // reset state
+      S.selColor = null;
+      S.distances = null;
+      S.mask = null;
+      S.selCount = 0;
+      S.prePixelData = null;
+      S.pixelPreview = (S.tab === 'pixel');
+      // fit image
+      fitImage();
+      $('emptyState').classList.add('hidden');
+      $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
+      updatePixelDim();
+      updateSpriteDim();
+      updateColorUI();
+      if (S.tab === 'sprite') updateSpritePreview();
+      if (S.tab === 'pixel') updatePixelPreview();
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function fitImage() {
+  const r = wrap.getBoundingClientRect();
+  const sx = (r.width - 40) / S.imgW;
+  const sy = (r.height - 40) / S.imgH;
+  S.zoom = Math.min(sx, sy, 1);
+  S.panX = (r.width - S.imgW * S.zoom) / 2;
+  S.panY = (r.height - S.imgH * S.zoom) / 2;
+}
+
+// ============================================================
+//  Render
+// ============================================================
+function render() {
+  const c = mainCanvas;
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, w, h);
+  if (!S.imgW) return;
+
+  ctx.save();
+  ctx.translate(S.panX, S.panY);
+  ctx.scale(S.zoom, S.zoom);
+
+  // checkerboard
+  drawChecker();
+
+  // image
+  ctx.imageSmoothingEnabled = false;
+  if (S.pixelPreview && pixCanvas.width > 0) {
+    ctx.drawImage(pixCanvas, 0, 0, S.imgW, S.imgH);
+  } else {
+    ctx.drawImage(workCanvas, 0, 0);
+  }
+
+  // selection overlay
+  if (S.mask && S.tab === 'cutout') {
+    ctx.drawImage(overlayCanvas, 0, 0);
+  }
+
+  // sprite grid
+  if (S.tab === 'sprite') {
+    drawSpriteGrid();
+  }
+
+  // brush cursor
+  if (S.tab === 'eraser' && S.mouseIn && S.imgW) {
+    const pos = screenToImg(S.mouseX, S.mouseY);
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 1 / S.zoom;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, S.brushSize, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.setLineDash([3 / S.zoom, 3 / S.zoom]);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, S.brushSize, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+
+  $('infoZoom').innerHTML = '缩放: <strong>' + Math.round(S.zoom * 100) + '%</strong>';
+}
+
+function drawChecker() {
+  if (S.bgColor) {
+    ctx.fillStyle = S.bgColor;
+    ctx.fillRect(0, 0, S.imgW, S.imgH);
+    return;
+  }
+  if (!checkerPattern) {
+    const s = 8;
+    const tc = document.createElement('canvas');
+    tc.width = s * 2; tc.height = s * 2;
+    const tx = tc.getContext('2d');
+    tx.fillStyle = '#fff'; tx.fillRect(0, 0, s * 2, s * 2);
+    tx.fillStyle = '#ddd';
+    tx.fillRect(0, 0, s, s);
+    tx.fillRect(s, s, s, s);
+    checkerPattern = ctx.createPattern(tc, 'repeat');
+  }
+  ctx.fillStyle = checkerPattern;
+  ctx.fillRect(0, 0, S.imgW, S.imgH);
+}
+
+function drawSpriteGrid() {
+  const cols = S.cols, rows = S.rows;
+  const cellW = S.imgW / cols, cellH = S.imgH / rows;
+  ctx.strokeStyle = 'rgba(74,158,255,0.7)';
+  ctx.lineWidth = 1 / S.zoom;
+  ctx.setLineDash([4 / S.zoom, 4 / S.zoom]);
+  for (let c = 1; c < cols; c++) {
+    ctx.beginPath();
+    ctx.moveTo(c * cellW, 0);
+    ctx.lineTo(c * cellW, S.imgH);
+    ctx.stroke();
+  }
+  for (let r = 1; r < rows; r++) {
+    ctx.beginPath();
+    ctx.moveTo(0, r * cellH);
+    ctx.lineTo(S.imgW, r * cellH);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(74,158,255,0.3)';
+  ctx.lineWidth = 1 / S.zoom;
+  ctx.setLineDash([]);
+  ctx.strokeRect(0, 0, S.imgW, S.imgH);
+}
+
+// ============================================================
+//  Coordinate helpers
+// ============================================================
+function screenToImg(clientX, clientY) {
+  const r = wrap.getBoundingClientRect();
+  const cx = clientX - r.left;
+  const cy = clientY - r.top;
+  return {
+    x: (cx - S.panX) / S.zoom,
+    y: (cy - S.panY) / S.zoom
+  };
+}
+
+function imgToScreen(ix, iy) {
+  const r = wrap.getBoundingClientRect();
+  return {
+    x: ix * S.zoom + S.panX + r.left,
+    y: iy * S.zoom + S.panY + r.top
+  };
+}
+
+function inBounds(ix, iy) {
+  return ix >= 0 && iy >= 0 && ix < S.imgW && iy < S.imgH;
+}
+
+// ============================================================
+//  Tool setup
+// ============================================================
+function setupTools() {
+  // threshold
+  const ts = $('thresholdSlider');
+  ts.addEventListener('input', () => {
+    S.threshold = +ts.value;
+    $('thresholdVal').textContent = S.threshold;
+    if (S.selColor) updateSelection();
+  });
+
+  // delete / clear
+  $('deleteBtn').addEventListener('click', deleteSelected);
+  $('clearSelBtn').addEventListener('click', clearSelection);
+
+  // brush
+  const bs = $('brushSlider');
+  bs.addEventListener('input', () => {
+    S.brushSize = +bs.value;
+    $('brushVal').textContent = S.brushSize;
+    render();
+  });
+
+  // pixel
+  const ps = $('blockSlider');
+  ps.addEventListener('input', () => {
+    S.blockSize = +ps.value;
+    $('blockVal').textContent = S.blockSize;
+    updatePixelDim();
+    updatePixelPreview();
+  });
+  $('applyPixelBtn').addEventListener('click', applyPixelate);
+  $('resetPixelBtn').addEventListener('click', resetPixelate);
+
+  // sprite
+  $('spriteCols').addEventListener('input', () => {
+    S.cols = Math.max(1, Math.min(64, +$('spriteCols').value || 1));
+    stopAnim();
+    updateSpriteDim();
+    updateSpritePreview();
+    render();
+  });
+  $('spriteRows').addEventListener('input', () => {
+    S.rows = Math.max(1, Math.min(64, +$('spriteRows').value || 1));
+    stopAnim();
+    updateSpriteDim();
+    updateSpritePreview();
+    render();
+  });
+
+  // animation controls
+  $('playBtn').addEventListener('click', toggleAnim);
+  $('prevFrameBtn').addEventListener('click', () => { stopAnim(); stepFrame(-1); });
+  $('nextFrameBtn').addEventListener('click', () => { stopAnim(); stepFrame(1); });
+  $('animFps').addEventListener('input', () => {
+    S.animFps = Math.max(1, Math.min(60, +$('animFps').value || 8));
+    if (S.animPlaying) { clearInterval(S.animTimer); S.animTimer = setInterval(animTick, 1000 / S.animFps); }
+  });
+}
+
+// ============================================================
+//  Canvas events
+// ============================================================
+function setupCanvasEvents() {
+  const c = mainCanvas;
+
+  // Zoom
+  c.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!S.imgW) return;
+    const r = wrap.getBoundingClientRect();
+    const mx = e.clientX - r.left;
+    const my = e.clientY - r.top;
+    const oldZ = S.zoom;
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    S.zoom = Math.max(0.05, Math.min(80, S.zoom * factor));
+    S.panX = mx - (mx - S.panX) * (S.zoom / oldZ);
+    S.panY = my - (my - S.panY) * (S.zoom / oldZ);
+    render();
+  }, { passive: false });
+
+  // Pan & tool
+  let panning = false, panStart = null;
+
+  c.addEventListener('mousedown', e => {
+    if (!S.imgW) return;
+    // Middle button or space key held: pan
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      panning = true;
+      panStart = { x: e.clientX, y: e.clientY, px: S.panX, py: S.panY };
+      c.style.cursor = 'grabbing';
+      e.preventDefault();
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const pos = screenToImg(e.clientX, e.clientY);
+    const ix = Math.floor(pos.x), iy = Math.floor(pos.y);
+
+    if (S.tab === 'cutout' && inBounds(ix, iy)) {
+      pickColor(ix, iy);
+    } else if (S.tab === 'eraser') {
+      S.drawing = true;
+      if (inBounds(ix, iy)) restoreAt(ix, iy);
+    }
+  });
+
+  c.addEventListener('mousemove', e => {
+    if (!S.imgW) return;
+    S.mouseX = e.clientX;
+    S.mouseY = e.clientY;
+    S.mouseIn = true;
+
+    if (panning) {
+      S.panX = panStart.px + (e.clientX - panStart.x);
+      S.panY = panStart.py + (e.clientY - panStart.y);
+      render();
+      return;
+    }
+
+    const pos = screenToImg(e.clientX, e.clientY);
+    const ix = Math.floor(pos.x), iy = Math.floor(pos.y);
+
+    // status bar
+    if (inBounds(ix, iy)) {
+      $('infoPos').innerHTML = '坐标: <strong>' + ix + ', ' + iy + '</strong>';
+      const d = workCtx.getImageData(ix, iy, 1, 1).data;
+      $('infoColor').innerHTML = '颜色: <strong>rgba(' + d[0] + ',' + d[1] + ',' + d[2] + ',' + d[3] + ')</strong>';
+    }
+
+    // cursor
+    if (S.tab === 'cutout') c.style.cursor = 'crosshair';
+    else if (S.tab === 'eraser') c.style.cursor = 'none';
+    else if (S.tab === 'sprite') c.style.cursor = 'default';
+    else c.style.cursor = 'default';
+
+    if (S.tab === 'eraser' && S.drawing && inBounds(ix, iy)) {
+      restoreAt(ix, iy);
+    }
+
+    if (S.tab === 'eraser') render();
+  });
+
+  c.addEventListener('mouseup', () => {
+    panning = false;
+    S.drawing = false;
+    c.style.cursor = '';
+  });
+
+  c.addEventListener('mouseleave', () => {
+    S.mouseIn = false;
+    panning = false;
+    S.drawing = false;
+    if (S.tab === 'eraser') render();
+  });
+
+  // Space for pan
+  let spaceDown = false;
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !spaceDown) {
+      spaceDown = true;
+      c.style.cursor = 'grab';
+    }
+  });
+  document.addEventListener('keyup', e => {
+    if (e.code === 'Space') {
+      spaceDown = false;
+      c.style.cursor = '';
+    }
+  });
+}
+
+// ============================================================
+//  Cutout: Color pick & delete
+// ============================================================
+function pickColor(x, y) {
+  const d = workCtx.getImageData(x, y, 1, 1).data;
+  if (d[3] === 0) return; // transparent pixel
+  S.selColor = { r: d[0], g: d[1], b: d[2] };
+  computeDistances();
+  updateSelection();
+  updateColorUI();
+}
+
+function computeDistances() {
+  if (!S.selColor) return;
+  const data = workCtx.getImageData(0, 0, S.imgW, S.imgH).data;
+  const total = S.imgW * S.imgH;
+  S.distances = new Float32Array(total);
+  const { r, g, b } = S.selColor;
+  for (let i = 0; i < total; i++) {
+    const idx = i * 4;
+    if (data[idx + 3] === 0) { S.distances[i] = 1e9; continue; }
+    const dr = data[idx] - r;
+    const dg = data[idx + 1] - g;
+    const db = data[idx + 2] - b;
+    S.distances[i] = Math.sqrt(dr * dr + dg * dg + db * db);
+  }
+}
+
+function updateSelection() {
+  if (!S.distances) return;
+  const maxD = 441.67; // sqrt(3*255^2)
+  const thresh = (S.threshold / 100) * maxD;
+  const total = S.imgW * S.imgH;
+  S.mask = new Uint8Array(total);
+  let count = 0;
+  for (let i = 0; i < total; i++) {
+    if (S.distances[i] <= thresh) { S.mask[i] = 1; count++; }
+  }
+  S.selCount = count;
+  $('selectedCount').textContent = '已选中 ' + count + ' 个像素';
+  updateOverlay();
+  render();
+}
+
+function updateOverlay() {
+  overlayCtx.clearRect(0, 0, S.imgW, S.imgH);
+  if (!S.mask) return;
+  const imgData = overlayCtx.createImageData(S.imgW, S.imgH);
+  const d = imgData.data;
+  for (let i = 0; i < S.mask.length; i++) {
+    if (S.mask[i]) {
+      const idx = i * 4;
+      d[idx] = 255; d[idx + 1] = 60; d[idx + 2] = 60; d[idx + 3] = 120;
+    }
+  }
+  overlayCtx.putImageData(imgData, 0, 0);
+}
+
+function deleteSelected() {
+  if (!S.mask || !S.selCount) return;
+  const data = workCtx.getImageData(0, 0, S.imgW, S.imgH);
+  const d = data.data;
+  for (let i = 0; i < S.mask.length; i++) {
+    if (S.mask[i]) {
+      const idx = i * 4;
+      d[idx + 3] = 0;
+    }
+  }
+  workCtx.putImageData(data, 0, 0);
+  clearSelection();
+  if (S.pixelPreview) updatePixelPreview();
+  if (S.tab === 'sprite') updateSpritePreview();
+}
+
+function clearSelection() {
+  S.selColor = null;
+  S.distances = null;
+  S.mask = null;
+  S.selCount = 0;
+  overlayCtx.clearRect(0, 0, S.imgW, S.imgH);
+  $('selectedCount').textContent = '';
+  updateColorUI();
+  render();
+}
+
+function updateColorUI() {
+  const sw = $('colorSwatch');
+  const lb = $('colorLabel');
+  if (S.selColor) {
+    const { r, g, b } = S.selColor;
+    sw.style.background = 'rgb(' + r + ',' + g + ',' + b + ')';
+    lb.textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')';
+  } else {
+    sw.style.background = 'transparent';
+    lb.textContent = '未选取';
+  }
+}
+
+// ============================================================
+//  Recovery eraser
+// ============================================================
+function restoreAt(cx, cy) {
+  const r = S.brushSize;
+  const x0 = Math.max(0, Math.floor(cx - r));
+  const y0 = Math.max(0, Math.floor(cy - r));
+  const x1 = Math.min(S.imgW - 1, Math.ceil(cx + r));
+  const y1 = Math.min(S.imgH - 1, Math.ceil(cy + r));
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (w <= 0 || h <= 0) return;
+
+  const src = origCtx.getImageData(x0, y0, w, h);
+  const dst = workCtx.getImageData(x0, y0, w, h);
+  const sd = src.data, dd = dst.data;
+  const r2 = r * r;
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x0 + x) - cx;
+      const dy = (y0 + y) - cy;
+      if (dx * dx + dy * dy <= r2) {
+        const idx = (y * w + x) * 4;
+        dd[idx] = sd[idx];
+        dd[idx + 1] = sd[idx + 1];
+        dd[idx + 2] = sd[idx + 2];
+        dd[idx + 3] = sd[idx + 3];
+      }
+    }
+  }
+  workCtx.putImageData(dst, x0, y0);
+  render();
+}
+
+// ============================================================
+//  Pixel art
+// ============================================================
+function updatePixelDim() {
+  if (!S.imgW) { $('pixelDim').textContent = '结果尺寸: -- x -- px'; return; }
+  const pw = Math.ceil(S.imgW / S.blockSize);
+  const ph = Math.ceil(S.imgH / S.blockSize);
+  $('pixelDim').textContent = '结果尺寸: ' + pw + ' x ' + ph + ' px';
+}
+
+function updatePixelPreview() {
+  if (!S.imgW) return;
+  const bs = S.blockSize;
+  const pw = Math.ceil(S.imgW / bs);
+  const ph = Math.ceil(S.imgH / bs);
+  pixCanvas.width = pw;
+  pixCanvas.height = ph;
+  pixCtx.imageSmoothingEnabled = false;
+
+  // Downscale via averaging
+  const src = workCtx.getImageData(0, 0, S.imgW, S.imgH).data;
+  const dst = pixCtx.createImageData(pw, ph);
+  const dd = dst.data;
+
+  for (let py = 0; py < ph; py++) {
+    for (let px = 0; px < pw; px++) {
+      let rr = 0, gg = 0, bb = 0, aa = 0, cnt = 0;
+      const sx0 = px * bs, sy0 = py * bs;
+      const sx1 = Math.min(sx0 + bs, S.imgW);
+      const sy1 = Math.min(sy0 + bs, S.imgH);
+      for (let sy = sy0; sy < sy1; sy++) {
+        for (let sx = sx0; sx < sx1; sx++) {
+          const si = (sy * S.imgW + sx) * 4;
+          const a = src[si + 3];
+          if (a > 0) {
+            rr += src[si] * a;
+            gg += src[si + 1] * a;
+            bb += src[si + 2] * a;
+            aa += a;
+            cnt++;
+          }
+        }
+      }
+      const di = (py * pw + px) * 4;
+      if (cnt > 0 && aa > 0) {
+        dd[di] = Math.round(rr / aa);
+        dd[di + 1] = Math.round(gg / aa);
+        dd[di + 2] = Math.round(bb / aa);
+        dd[di + 3] = Math.round(aa / cnt);
+      }
+    }
+  }
+  pixCtx.putImageData(dst, 0, 0);
+  render();
+}
+
+function applyPixelate() {
+  if (!S.imgW || pixCanvas.width === 0) return;
+  // Save pre-pixelate state
+  S.prePixelData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
+  // Apply: draw pixelated back to work canvas
+  workCtx.clearRect(0, 0, S.imgW, S.imgH);
+  workCtx.imageSmoothingEnabled = false;
+  workCtx.drawImage(pixCanvas, 0, 0, S.imgW, S.imgH);
+  // Update image dimensions to the pixelated size
+  const pw = pixCanvas.width, ph = pixCanvas.height;
+  S.imgW = pw;
+  S.imgH = ph;
+  workCanvas.width = pw;
+  workCanvas.height = ph;
+  origCanvas.width = pw;
+  origCanvas.height = ph;
+  overlayCanvas.width = pw;
+  overlayCanvas.height = ph;
+  workCtx.drawImage(pixCanvas, 0, 0);
+  origCtx.drawImage(pixCanvas, 0, 0);
+  S.pixelPreview = false;
+  fitImage();
+  $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
+  updatePixelDim();
+  updateSpriteDim();
+  clearSelection();
+  if (S.tab === 'sprite') updateSpritePreview();
+  render();
+}
+
+function resetPixelate() {
+  if (!S.prePixelData) return;
+  S.imgW = S.prePixelData.width;
+  S.imgH = S.prePixelData.height;
+  [workCanvas, origCanvas, overlayCanvas].forEach(c => { c.width = S.imgW; c.height = S.imgH; });
+  workCtx.putImageData(S.prePixelData, 0, 0);
+  // Also restore original from file - origCtx might have been overwritten
+  // Actually we need to store original separately. Let's copy workCtx to origCtx as best effort
+  origCtx.putImageData(S.prePixelData, 0, 0);
+  S.prePixelData = null;
+  S.pixelPreview = (S.tab === 'pixel');
+  fitImage();
+  $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
+  updatePixelDim();
+  updateSpriteDim();
+  clearSelection();
+  if (S.pixelPreview) updatePixelPreview();
+  if (S.tab === 'sprite') updateSpritePreview();
+  render();
+}
+
+// ============================================================
+//  Sprite preview
+// ============================================================
+function updateSpriteDim() {
+  if (!S.imgW) { $('spriteDim').textContent = '每格尺寸: -- x -- px'; return; }
+  const cw = Math.floor(S.imgW / S.cols);
+  const ch = Math.floor(S.imgH / S.rows);
+  $('spriteDim').textContent = '每格尺寸: ' + cw + ' x ' + ch + ' px';
+}
+
+function updateSpritePreview() {
+  stopAnim();
+  S.animFrame = 0;
+  const grid = $('spriteGrid');
+  grid.innerHTML = '';
+  if (!S.imgW) return;
+
+  const cols = S.cols, rows = S.rows;
+  const cellW = Math.floor(S.imgW / cols);
+  const cellH = Math.floor(S.imgH / rows);
+  if (cellW < 1 || cellH < 1) return;
+
+  // Decide display size for each sprite cell
+  const maxCellDisplay = 80;
+  const scale = Math.max(1, Math.min(maxCellDisplay / cellW, maxCellDisplay / cellH));
+  const dispW = Math.round(cellW * scale);
+  const dispH = Math.round(cellH * scale);
+
+  // Source canvas for extraction
+  const srcCanvas = workCanvas;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'sprite-cell';
+      cell.style.width = dispW + 'px';
+      cell.style.height = dispH + 'px';
+
+      const sc = document.createElement('canvas');
+      sc.width = dispW;
+      sc.height = dispH;
+      const sctx = sc.getContext('2d');
+      sctx.imageSmoothingEnabled = false;
+      if (S.bgColor) { sctx.fillStyle = S.bgColor; sctx.fillRect(0, 0, dispW, dispH); }
+      sctx.drawImage(srcCanvas, c * cellW, r * cellH, cellW, cellH, 0, 0, dispW, dispH);
+      sc.style.width = dispW + 'px';
+      sc.style.height = dispH + 'px';
+
+      cell.appendChild(sc);
+      cell.title = '行 ' + (r + 1) + ' 列 ' + (c + 1) + ' (' + cellW + 'x' + cellH + ')';
+      const ci = c, ri = r;
+      cell.addEventListener('click', () => {
+        stopAnim();
+        S.animFrame = ri * cols + ci;
+        renderAnimFrame();
+      });
+      grid.appendChild(cell);
+    }
+  }
+  $('spriteHeader').textContent = '精灵帧预览 (' + cols + 'x' + rows + ', 每格 ' + cellW + 'x' + cellH + ' px) — 点击帧可预览';
+
+  // Render first frame
+  renderAnimFrame();
+}
+
+function exportSprite(col, row, cellW, cellH) {
+  const tc = document.createElement('canvas');
+  tc.width = cellW;
+  tc.height = cellH;
+  const tctx = tc.getContext('2d');
+  tctx.drawImage(workCanvas, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+  const link = document.createElement('a');
+  link.download = 'sprite_r' + (row + 1) + '_c' + (col + 1) + '.png';
+  link.href = tc.toDataURL('image/png');
+  link.click();
+}
+
+// ============================================================
+//  Animation playback
+// ============================================================
+function totalFrames() { return S.cols * S.rows; }
+
+function toggleAnim() {
+  if (S.animPlaying) stopAnim(); else startAnim();
+}
+
+function startAnim() {
+  if (!S.imgW || totalFrames() < 1) return;
+  S.animPlaying = true;
+  $('playBtn').textContent = '❚❚ 暂停';
+  S.animTimer = setInterval(animTick, 1000 / S.animFps);
+  renderAnimFrame();
+}
+
+function stopAnim() {
+  S.animPlaying = false;
+  $('playBtn').textContent = '▶ 播放';
+  if (S.animTimer) { clearInterval(S.animTimer); S.animTimer = null; }
+}
+
+function animTick() {
+  S.animFrame = (S.animFrame + 1) % totalFrames();
+  renderAnimFrame();
+}
+
+function stepFrame(dir) {
+  if (!S.imgW) return;
+  const t = totalFrames();
+  S.animFrame = ((S.animFrame + dir) % t + t) % t;
+  renderAnimFrame();
+}
+
+function renderAnimFrame() {
+  const cols = S.cols, rows = S.rows;
+  const cellW = Math.floor(S.imgW / cols);
+  const cellH = Math.floor(S.imgH / rows);
+  if (cellW < 1 || cellH < 1) return;
+
+  const col = S.animFrame % cols;
+  const row = Math.floor(S.animFrame / cols);
+
+  // Draw to anim preview canvas
+  const ac = $('animCanvas');
+  ac.width = cellW;
+  ac.height = cellH;
+  const actx = ac.getContext('2d');
+  actx.imageSmoothingEnabled = false;
+  if (S.bgColor) {
+    actx.fillStyle = S.bgColor;
+    actx.fillRect(0, 0, cellW, cellH);
+  }
+  actx.drawImage(workCanvas, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+
+  // Update frame info
+  $('frameInfo').textContent = '帧: ' + (S.animFrame + 1) + '/' + totalFrames();
+
+  // Highlight active cell in grid
+  document.querySelectorAll('.sprite-cell').forEach((el, i) => {
+    el.classList.toggle('active', i === S.animFrame);
+  });
+
+  // Scroll active cell into view
+  const activeCell = document.querySelector('.sprite-cell.active');
+  if (activeCell) activeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// ============================================================
+//  Export
+// ============================================================
+function exportImage() {
+  if (!S.imgW) return;
+  const tc = document.createElement('canvas');
+  tc.width = S.imgW;
+  tc.height = S.imgH;
+  const tctx = tc.getContext('2d');
+  tctx.drawImage(workCanvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = 'processed.png';
+  link.href = tc.toDataURL('image/png');
+  link.click();
+}
+
+// ============================================================
+//  Start
+// ============================================================
+init();
+</script>
+</body>
+</html>
