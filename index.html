@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>图片处理工具</title>
+<script src="./perfect-pixel-ts/dist/index.global.js"></script>
 <style>
 :root {
   --bg: #1e1e1e;
@@ -252,6 +253,32 @@ section.main {
   text-align: center;
   margin-top: 2px;
 }
+.toggle-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider {
+  position: absolute; inset: 0; background: #555; border-radius: 11px;
+  transition: 0.2s; cursor: pointer;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 16px; height: 16px;
+  left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--accent); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+.auto-detect-result {
+  font-size: 12px; color: var(--text); padding: 8px 10px;
+  background: rgba(255,255,255,0.04); border-radius: var(--radius);
+  line-height: 1.6;
+}
+.auto-detect-result strong { color: var(--accent); }
 .sprite-panel-header {
   font-size: 13px;
   color: var(--text-dim);
@@ -341,9 +368,18 @@ footer span strong { color: var(--text); font-weight: 500; }
   </div>
 
   <div id="pixelPanel" class="panel">
-    <div class="hint">将图片转换为像素风格</div>
-    <label>像素块大小 <span id="blockVal">8</span></label>
-    <input type="range" id="blockSlider" min="2" max="64" value="8">
+    <label class="toggle-label">
+      <span>自动像素化</span>
+      <div class="toggle"><input type="checkbox" id="autoPixelToggle"><span class="toggle-slider"></span></div>
+    </label>
+    <div class="hint" id="autoHint" style="display:none">自动识别AI伪像素图的网格，多数决定法取色</div>
+    <div id="manualPixelCtrl">
+      <label>像素块大小 <span id="blockVal">8</span></label>
+      <input type="range" id="blockSlider" min="2" max="64" value="8">
+    </div>
+    <div id="autoPixelInfo" style="display:none">
+      <div class="auto-detect-result" id="autoDetectResult">加载图片后自动检测</div>
+    </div>
     <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
     <div class="btn-row">
       <button class="btn btn-accent" id="applyPixelBtn">应用像素化</button>
@@ -426,6 +462,8 @@ const S = {
   blockSize: 8,
   pixelPreview: false,
   prePixelData: null, // ImageData snapshot before apply
+  autoPixel: false,
+  detectedGrid: null, // {blockSize, offX, offY, score}
   // sprite
   cols: 4, rows: 4,
   // animation
@@ -577,11 +615,13 @@ function loadImage(file) {
       S.mask = null;
       S.selCount = 0;
       S.prePixelData = null;
+      S.detectedGrid = null;
       S.pixelPreview = (S.tab === 'pixel');
       // fit image
       fitImage();
       $('emptyState').classList.add('hidden');
       $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
+      if (S.autoPixel) runAutoDetect();
       updatePixelDim();
       updateSpriteDim();
       updateColorUI();
@@ -764,6 +804,17 @@ function setupTools() {
   });
   $('applyPixelBtn').addEventListener('click', applyPixelate);
   $('resetPixelBtn').addEventListener('click', resetPixelate);
+  $('autoPixelToggle').addEventListener('change', e => {
+    S.autoPixel = e.target.checked;
+    $('manualPixelCtrl').style.display = S.autoPixel ? 'none' : '';
+    $('autoPixelInfo').style.display = S.autoPixel ? '' : 'none';
+    $('autoHint').style.display = S.autoPixel ? '' : 'none';
+    if (S.autoPixel && S.imgW) {
+      runAutoDetect();
+    }
+    updatePixelDim();
+    updatePixelPreview();
+  });
 
   // sprite
   $('spriteCols').addEventListener('input', () => {
@@ -1040,21 +1091,35 @@ function restoreAt(cx, cy) {
 // ============================================================
 function updatePixelDim() {
   if (!S.imgW) { $('pixelDim').textContent = '结果尺寸: -- x -- px'; return; }
-  const pw = Math.ceil(S.imgW / S.blockSize);
-  const ph = Math.ceil(S.imgH / S.blockSize);
-  $('pixelDim').textContent = '结果尺寸: ' + pw + ' x ' + ph + ' px';
+  if (S.autoPixel && S.detectedGrid) {
+    const r = S.detectedGrid;
+    $('pixelDim').textContent = '结果尺寸: ' + r.width + ' x ' + r.height + ' px';
+  } else {
+    const pw = Math.ceil(S.imgW / S.blockSize);
+    const ph = Math.ceil(S.imgH / S.blockSize);
+    $('pixelDim').textContent = '结果尺寸: ' + pw + ' x ' + ph + ' px';
+  }
 }
 
 function updatePixelPreview() {
   if (!S.imgW) return;
+  if (S.autoPixel) {
+    if (!S.detectedGrid) return;
+    autoPixelate();
+  } else {
+    manualPixelate();
+  }
+  render();
+}
+
+// --- Manual pixelation (averaging) ---
+function manualPixelate() {
   const bs = S.blockSize;
   const pw = Math.ceil(S.imgW / bs);
   const ph = Math.ceil(S.imgH / bs);
   pixCanvas.width = pw;
   pixCanvas.height = ph;
-  pixCtx.imageSmoothingEnabled = false;
 
-  // Downscale via averaging
   const src = workCtx.getImageData(0, 0, S.imgW, S.imgH).data;
   const dst = pixCtx.createImageData(pw, ph);
   const dd = dst.data;
@@ -1088,7 +1153,32 @@ function updatePixelPreview() {
     }
   }
   pixCtx.putImageData(dst, 0, 0);
-  render();
+}
+
+// --- Auto grid detection (PerfectPixel library) ---
+function runAutoDetect() {
+  if (!S.imgW) return;
+  const imageData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
+  const result = PerfectPixel.getPerfectPixel(imageData, { sampleMethod: 'majority' });
+  if (!result) {
+    S.detectedGrid = null;
+    $('autoDetectResult').innerHTML = '<span style="color:#e55">检测失败：未能识别像素网格</span>';
+    return;
+  }
+  S.detectedGrid = result; // { width, height, data }
+  $('autoDetectResult').innerHTML =
+    '网格: <strong>' + result.width + ' x ' + result.height + '</strong>';
+}
+
+// --- Auto pixelation (uses pre-computed PerfectPixel result) ---
+function autoPixelate() {
+  const r = S.detectedGrid;
+  if (!r || !r.data) return;
+  pixCanvas.width = r.width;
+  pixCanvas.height = r.height;
+  const imgData = pixCtx.createImageData(r.width, r.height);
+  imgData.data.set(r.data);
+  pixCtx.putImageData(imgData, 0, 0);
 }
 
 function applyPixelate() {

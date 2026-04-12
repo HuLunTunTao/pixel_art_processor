@@ -1,0 +1,16 @@
+{
+  "name": "perfect-pixel-ts",
+  "version": "1.0.0",
+  "description": "Convert AI-generated pseudo pixel art to clean pixel art",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}
