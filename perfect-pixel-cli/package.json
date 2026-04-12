@@ -1,0 +1,21 @@
+{
+  "name": "perfect-pixel-cli",
+  "version": "1.0.0",
+  "description": "CLI wrapper for perfect-pixel-ts",
+  "bin": {
+    "perfect-pixel": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "perfect-pixel-ts": "file:../perfect-pixel-ts",
+    "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
