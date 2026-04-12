@@ -369,21 +369,26 @@ footer span strong { color: var(--text); font-weight: 500; }
 
   <div id="pixelPanel" class="panel">
     <label class="toggle-label">
-      <span>自动像素化</span>
-      <div class="toggle"><input type="checkbox" id="autoPixelToggle"><span class="toggle-slider"></span></div>
+      <span>启用像素化</span>
+      <div class="toggle"><input type="checkbox" id="pixelToggle"><span class="toggle-slider"></span></div>
     </label>
-    <div class="hint" id="autoHint" style="display:none">自动识别AI伪像素图的网格，多数决定法取色</div>
-    <div id="manualPixelCtrl">
-      <label>像素块大小 <span id="blockVal">8</span></label>
-      <input type="range" id="blockSlider" min="2" max="64" value="8">
-    </div>
-    <div id="autoPixelInfo" style="display:none">
-      <div class="auto-detect-result" id="autoDetectResult">加载图片后自动检测</div>
-    </div>
-    <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
-    <div class="btn-row">
-      <button class="btn btn-accent" id="applyPixelBtn">应用像素化</button>
-      <button class="btn btn-secondary" id="resetPixelBtn">撤销像素化</button>
+    <div id="pixelBody" style="display:none">
+      <label class="toggle-label" style="margin-top:4px">
+        <span>智能识别 (AI伪像素图)</span>
+        <div class="toggle"><input type="checkbox" id="autoPixelToggle"><span class="toggle-slider"></span></div>
+      </label>
+      <div id="manualPixelCtrl">
+        <label>像素块大小 <span id="blockVal">8</span></label>
+        <input type="range" id="blockSlider" min="2" max="64" value="8">
+      </div>
+      <div id="autoPixelInfo" style="display:none">
+        <div class="auto-detect-result" id="autoDetectResult">加载图片后自动检测</div>
+      </div>
+      <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
+      <div class="btn-row">
+        <button class="btn btn-accent" id="applyPixelBtn">应用到图片</button>
+        <button class="btn btn-secondary" id="resetPixelBtn">撤销</button>
+      </div>
     </div>
   </div>
 
@@ -460,10 +465,10 @@ const S = {
   drawing: false,
   // pixel
   blockSize: 8,
-  pixelPreview: false,
-  prePixelData: null, // ImageData snapshot before apply
-  autoPixel: false,
-  detectedGrid: null, // {blockSize, offX, offY, score}
+  pixelOn: false,        // master toggle: is pixelation enabled?
+  autoPixel: false,      // sub-toggle: use smart detection?
+  prePixelData: null,    // ImageData snapshot before apply
+  detectedGrid: null,    // PerfectPixel result cache
   // sprite
   cols: 4, rows: 4,
   // animation
@@ -531,7 +536,6 @@ function setupTabs() {
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       S.tab = btn.dataset.tab;
       $(S.tab + 'Panel').classList.add('active');
-      S.pixelPreview = (S.tab === 'pixel');
       const sp = $('spritePreviewPanel');
       if (S.tab === 'sprite') {
         sp.classList.add('active');
@@ -539,9 +543,6 @@ function setupTabs() {
       } else {
         sp.classList.remove('active');
         stopAnim();
-      }
-      if (S.tab === 'pixel' && S.imgW) {
-        updatePixelPreview();
       }
       render();
     });
@@ -616,17 +617,17 @@ function loadImage(file) {
       S.selCount = 0;
       S.prePixelData = null;
       S.detectedGrid = null;
-      S.pixelPreview = (S.tab === 'pixel');
+      S.pixelOn = false;
+      $('pixelToggle').checked = false;
+      $('pixelBody').style.display = 'none';
       // fit image
       fitImage();
       $('emptyState').classList.add('hidden');
       $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
-      if (S.autoPixel) runAutoDetect();
       updatePixelDim();
       updateSpriteDim();
       updateColorUI();
       if (S.tab === 'sprite') updateSpritePreview();
-      if (S.tab === 'pixel') updatePixelPreview();
       render();
     };
     img.src = e.target.result;
@@ -663,7 +664,7 @@ function render() {
 
   // image
   ctx.imageSmoothingEnabled = false;
-  if (S.pixelPreview && pixCanvas.width > 0) {
+  if (S.pixelOn && pixCanvas.width > 0) {
     ctx.drawImage(pixCanvas, 0, 0, S.imgW, S.imgH);
   } else {
     ctx.drawImage(workCanvas, 0, 0);
@@ -794,27 +795,33 @@ function setupTools() {
     render();
   });
 
-  // pixel
-  const ps = $('blockSlider');
-  ps.addEventListener('input', () => {
-    S.blockSize = +ps.value;
+  // pixel — master toggle
+  $('pixelToggle').addEventListener('change', e => {
+    S.pixelOn = e.target.checked;
+    $('pixelBody').style.display = S.pixelOn ? '' : 'none';
+    if (S.pixelOn && S.imgW) computePixel();
+    updatePixelDim();
+    render();
+  });
+  // block size slider (manual mode)
+  $('blockSlider').addEventListener('input', () => {
+    S.blockSize = +$('blockSlider').value;
     $('blockVal').textContent = S.blockSize;
     updatePixelDim();
-    updatePixelPreview();
+    if (S.pixelOn && !S.autoPixel && S.imgW) computePixel();
   });
-  $('applyPixelBtn').addEventListener('click', applyPixelate);
-  $('resetPixelBtn').addEventListener('click', resetPixelate);
+  // auto/manual sub-toggle
   $('autoPixelToggle').addEventListener('change', e => {
     S.autoPixel = e.target.checked;
     $('manualPixelCtrl').style.display = S.autoPixel ? 'none' : '';
     $('autoPixelInfo').style.display = S.autoPixel ? '' : 'none';
-    $('autoHint').style.display = S.autoPixel ? '' : 'none';
-    if (S.autoPixel && S.imgW) {
-      runAutoDetect();
-    }
+    S.detectedGrid = null;
+    if (S.pixelOn && S.imgW) computePixel();
     updatePixelDim();
-    updatePixelPreview();
+    render();
   });
+  $('applyPixelBtn').addEventListener('click', applyPixelate);
+  $('resetPixelBtn').addEventListener('click', resetPixelate);
 
   // sprite
   $('spriteCols').addEventListener('input', () => {
@@ -1024,7 +1031,7 @@ function deleteSelected() {
   }
   workCtx.putImageData(data, 0, 0);
   clearSelection();
-  if (S.pixelPreview) updatePixelPreview();
+  if (S.pixelOn) computePixel();
   if (S.tab === 'sprite') updateSpritePreview();
 }
 
@@ -1092,142 +1099,104 @@ function restoreAt(cx, cy) {
 function updatePixelDim() {
   if (!S.imgW) { $('pixelDim').textContent = '结果尺寸: -- x -- px'; return; }
   if (S.autoPixel && S.detectedGrid) {
-    const r = S.detectedGrid;
-    $('pixelDim').textContent = '结果尺寸: ' + r.width + ' x ' + r.height + ' px';
-  } else {
+    $('pixelDim').textContent = '结果尺寸: ' + S.detectedGrid.width + ' x ' + S.detectedGrid.height + ' px';
+  } else if (!S.autoPixel) {
     const pw = Math.ceil(S.imgW / S.blockSize);
     const ph = Math.ceil(S.imgH / S.blockSize);
     $('pixelDim').textContent = '结果尺寸: ' + pw + ' x ' + ph + ' px';
   }
 }
 
-function updatePixelPreview() {
-  if (!S.imgW) return;
+/** Compute the pixelated result onto pixCanvas. Called when toggle is on or params change. */
+function computePixel() {
   if (S.autoPixel) {
-    if (!S.detectedGrid) return;
-    autoPixelate();
+    // Smart detection via PerfectPixel library
+    if (!S.detectedGrid) {
+      const imageData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
+      const result = PerfectPixel.getPerfectPixel(imageData, { sampleMethod: 'majority' });
+      if (!result) {
+        S.detectedGrid = null;
+        $('autoDetectResult').innerHTML = '<span style="color:#e55">检测失败：未能识别像素网格</span>';
+        return;
+      }
+      S.detectedGrid = result;
+      $('autoDetectResult').innerHTML = '网格: <strong>' + result.width + ' x ' + result.height + '</strong>';
+    }
+    // Write cached result to pixCanvas
+    pixCanvas.width = S.detectedGrid.width;
+    pixCanvas.height = S.detectedGrid.height;
+    const imgData = pixCtx.createImageData(S.detectedGrid.width, S.detectedGrid.height);
+    imgData.data.set(S.detectedGrid.data);
+    pixCtx.putImageData(imgData, 0, 0);
   } else {
-    manualPixelate();
-  }
-  render();
-}
-
-// --- Manual pixelation (averaging) ---
-function manualPixelate() {
-  const bs = S.blockSize;
-  const pw = Math.ceil(S.imgW / bs);
-  const ph = Math.ceil(S.imgH / bs);
-  pixCanvas.width = pw;
-  pixCanvas.height = ph;
-
-  const src = workCtx.getImageData(0, 0, S.imgW, S.imgH).data;
-  const dst = pixCtx.createImageData(pw, ph);
-  const dd = dst.data;
-
-  for (let py = 0; py < ph; py++) {
-    for (let px = 0; px < pw; px++) {
-      let rr = 0, gg = 0, bb = 0, aa = 0, cnt = 0;
-      const sx0 = px * bs, sy0 = py * bs;
-      const sx1 = Math.min(sx0 + bs, S.imgW);
-      const sy1 = Math.min(sy0 + bs, S.imgH);
-      for (let sy = sy0; sy < sy1; sy++) {
-        for (let sx = sx0; sx < sx1; sx++) {
-          const si = (sy * S.imgW + sx) * 4;
-          const a = src[si + 3];
-          if (a > 0) {
-            rr += src[si] * a;
-            gg += src[si + 1] * a;
-            bb += src[si + 2] * a;
-            aa += a;
-            cnt++;
+    // Manual pixelation (averaging)
+    const bs = S.blockSize;
+    const pw = Math.ceil(S.imgW / bs);
+    const ph = Math.ceil(S.imgH / bs);
+    pixCanvas.width = pw;
+    pixCanvas.height = ph;
+    const src = workCtx.getImageData(0, 0, S.imgW, S.imgH).data;
+    const dst = pixCtx.createImageData(pw, ph);
+    const dd = dst.data;
+    for (let py = 0; py < ph; py++) {
+      for (let px = 0; px < pw; px++) {
+        let rr = 0, gg = 0, bb = 0, aa = 0, cnt = 0;
+        const sx0 = px * bs, sy0 = py * bs;
+        const sx1 = Math.min(sx0 + bs, S.imgW);
+        const sy1 = Math.min(sy0 + bs, S.imgH);
+        for (let sy = sy0; sy < sy1; sy++) {
+          for (let sx = sx0; sx < sx1; sx++) {
+            const si = (sy * S.imgW + sx) * 4;
+            const a = src[si + 3];
+            if (a > 0) { rr += src[si] * a; gg += src[si + 1] * a; bb += src[si + 2] * a; aa += a; cnt++; }
           }
         }
-      }
-      const di = (py * pw + px) * 4;
-      if (cnt > 0 && aa > 0) {
-        dd[di] = Math.round(rr / aa);
-        dd[di + 1] = Math.round(gg / aa);
-        dd[di + 2] = Math.round(bb / aa);
-        dd[di + 3] = Math.round(aa / cnt);
+        const di = (py * pw + px) * 4;
+        if (cnt > 0 && aa > 0) {
+          dd[di] = Math.round(rr / aa); dd[di + 1] = Math.round(gg / aa);
+          dd[di + 2] = Math.round(bb / aa); dd[di + 3] = Math.round(aa / cnt);
+        }
       }
     }
+    pixCtx.putImageData(dst, 0, 0);
   }
-  pixCtx.putImageData(dst, 0, 0);
-}
-
-// --- Auto grid detection (PerfectPixel library) ---
-function runAutoDetect() {
-  if (!S.imgW) return;
-  const imageData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
-  const result = PerfectPixel.getPerfectPixel(imageData, { sampleMethod: 'majority' });
-  if (!result) {
-    S.detectedGrid = null;
-    $('autoDetectResult').innerHTML = '<span style="color:#e55">检测失败：未能识别像素网格</span>';
-    return;
-  }
-  S.detectedGrid = result; // { width, height, data }
-  $('autoDetectResult').innerHTML =
-    '网格: <strong>' + result.width + ' x ' + result.height + '</strong>';
-}
-
-// --- Auto pixelation (uses pre-computed PerfectPixel result) ---
-function autoPixelate() {
-  const r = S.detectedGrid;
-  if (!r || !r.data) return;
-  pixCanvas.width = r.width;
-  pixCanvas.height = r.height;
-  const imgData = pixCtx.createImageData(r.width, r.height);
-  imgData.data.set(r.data);
-  pixCtx.putImageData(imgData, 0, 0);
+  updatePixelDim();
+  render();
 }
 
 function applyPixelate() {
   if (!S.imgW || pixCanvas.width === 0) return;
-  // Save pre-pixelate state
   S.prePixelData = workCtx.getImageData(0, 0, S.imgW, S.imgH);
-  // Apply: draw pixelated back to work canvas
-  workCtx.clearRect(0, 0, S.imgW, S.imgH);
-  workCtx.imageSmoothingEnabled = false;
-  workCtx.drawImage(pixCanvas, 0, 0, S.imgW, S.imgH);
-  // Update image dimensions to the pixelated size
   const pw = pixCanvas.width, ph = pixCanvas.height;
-  S.imgW = pw;
-  S.imgH = ph;
-  workCanvas.width = pw;
-  workCanvas.height = ph;
-  origCanvas.width = pw;
-  origCanvas.height = ph;
-  overlayCanvas.width = pw;
-  overlayCanvas.height = ph;
+  S.imgW = pw; S.imgH = ph;
+  [workCanvas, origCanvas, overlayCanvas].forEach(c => { c.width = pw; c.height = ph; });
   workCtx.drawImage(pixCanvas, 0, 0);
   origCtx.drawImage(pixCanvas, 0, 0);
-  S.pixelPreview = false;
+  // Turn off pixel preview, collapse panel
+  S.pixelOn = false;
+  $('pixelToggle').checked = false;
+  $('pixelBody').style.display = 'none';
   fitImage();
   $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
-  updatePixelDim();
-  updateSpriteDim();
-  clearSelection();
+  updatePixelDim(); updateSpriteDim(); clearSelection();
   if (S.tab === 'sprite') updateSpritePreview();
   render();
 }
 
 function resetPixelate() {
   if (!S.prePixelData) return;
-  S.imgW = S.prePixelData.width;
-  S.imgH = S.prePixelData.height;
+  S.imgW = S.prePixelData.width; S.imgH = S.prePixelData.height;
   [workCanvas, origCanvas, overlayCanvas].forEach(c => { c.width = S.imgW; c.height = S.imgH; });
   workCtx.putImageData(S.prePixelData, 0, 0);
-  // Also restore original from file - origCtx might have been overwritten
-  // Actually we need to store original separately. Let's copy workCtx to origCtx as best effort
   origCtx.putImageData(S.prePixelData, 0, 0);
   S.prePixelData = null;
-  S.pixelPreview = (S.tab === 'pixel');
+  S.pixelOn = false;
+  $('pixelToggle').checked = false;
+  $('pixelBody').style.display = 'none';
+  S.detectedGrid = null;
   fitImage();
   $('infoSize').innerHTML = '尺寸: <strong>' + S.imgW + ' x ' + S.imgH + '</strong>';
-  updatePixelDim();
-  updateSpriteDim();
-  clearSelection();
-  if (S.pixelPreview) updatePixelPreview();
+  updatePixelDim(); updateSpriteDim(); clearSelection();
   if (S.tab === 'sprite') updateSpritePreview();
   render();
 }
