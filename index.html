@@ -533,16 +533,28 @@ footer span strong { color: var(--fg); font-weight: 600; }
   </div>
 
   <div id="spritePanel" class="panel">
-    <div class="hint">设置精灵图网格并预览各帧</div>
+    <div class="hint">精灵图参数（参考 Godot 规范）</div>
     <div class="input-row">
-      <label>列数 (宽)</label>
-      <input type="number" id="spriteCols" min="1" max="64" value="4">
+      <label>大小</label>
+      <input type="number" id="cellW" min="1" max="4096" value="32"> x
+      <input type="number" id="cellH" min="1" max="4096" value="32"> px
     </div>
     <div class="input-row">
-      <label>行数 (高)</label>
-      <input type="number" id="spriteRows" min="1" max="64" value="4">
+      <label>帧数</label>
+      <input type="number" id="gridCols" min="1" max="256" value="4"> x
+      <input type="number" id="gridRows" min="1" max="256" value="1">
     </div>
-    <div class="dim-display" id="spriteDim">每格尺寸: -- x -- px</div>
+    <div class="input-row">
+      <label>间距</label>
+      <input type="number" id="sepX" min="0" max="256" value="0"> x
+      <input type="number" id="sepY" min="0" max="256" value="0"> px
+    </div>
+    <div class="input-row">
+      <label>偏移</label>
+      <input type="number" id="offX" min="-256" max="4096" value="0"> x
+      <input type="number" id="offY" min="-256" max="4096" value="0"> px
+    </div>
+    <div class="dim-display" id="spriteDim">网格: -- x -- 帧 | -- x -- px</div>
     <div class="input-row">
       <label>FPS</label>
       <input type="number" id="animFps" min="1" max="60" value="8">
@@ -553,6 +565,10 @@ footer span strong { color: var(--fg); font-weight: 600; }
       <button class="btn btn-secondary" id="nextFrameBtn">▶</button>
     </div>
     <div class="frame-info" id="frameInfo">帧: --/--</div>
+    <div class="btn-row" style="margin-top:4px">
+      <button class="btn btn-accent" id="exportSheetBtn">导出精灵图</button>
+      <button class="btn btn-secondary" id="exportAllSpritesBtn">导出所有帧</button>
+    </div>
   </div>
 </aside>
 
@@ -611,8 +627,11 @@ const S = {
   prePixelData: null,    // ImageData snapshot before apply
   detectedGrid: null,    // PerfectPixel result cache
   pixelScale: 1,         // output pixel size (1=true size)
-  // sprite
-  cols: 4, rows: 4,
+  // sprite grid params (Godot-style)
+  cellW: 32, cellH: 32,   // cell size
+  gridCols: 4, gridRows: 1, // frame count
+  sepX: 0, sepY: 0,       // spacing
+  offX: 0, offY: 0,       // offset (allows negative)
   // animation
   animPlaying: false,
   animFrame: 0,
@@ -890,27 +909,28 @@ function drawChecker() {
 }
 
 function drawSpriteGrid() {
-  const cols = S.cols, rows = S.rows;
-  const cellW = S.imgW / cols, cellH = S.imgH / rows;
+  const g = spriteGrid();
+  if (!g) return;
   ctx.strokeStyle = 'rgba(74,158,255,0.7)';
   ctx.lineWidth = 1 / S.zoom;
   ctx.setLineDash([4 / S.zoom, 4 / S.zoom]);
-  for (let c = 1; c < cols; c++) {
-    ctx.beginPath();
-    ctx.moveTo(c * cellW, 0);
-    ctx.lineTo(c * cellW, S.imgH);
-    ctx.stroke();
+  for (let c = 0; c <= g.cols; c++) {
+    const x = g.offX + c * (g.cellW + g.sepX);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, S.imgH); ctx.stroke();
+    if (c < g.cols && g.sepX > 0) {
+      const x2 = x + g.cellW;
+      ctx.beginPath(); ctx.moveTo(x2, 0); ctx.lineTo(x2, S.imgH); ctx.stroke();
+    }
   }
-  for (let r = 1; r < rows; r++) {
-    ctx.beginPath();
-    ctx.moveTo(0, r * cellH);
-    ctx.lineTo(S.imgW, r * cellH);
-    ctx.stroke();
+  for (let r = 0; r <= g.rows; r++) {
+    const y = g.offY + r * (g.cellH + g.sepY);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(S.imgW, y); ctx.stroke();
+    if (r < g.rows && g.sepY > 0) {
+      const y2 = y + g.cellH;
+      ctx.beginPath(); ctx.moveTo(0, y2); ctx.lineTo(S.imgW, y2); ctx.stroke();
+    }
   }
-  ctx.strokeStyle = 'rgba(74,158,255,0.3)';
-  ctx.lineWidth = 1 / S.zoom;
   ctx.setLineDash([]);
-  ctx.strokeRect(0, 0, S.imgW, S.imgH);
 }
 
 // ============================================================
@@ -999,21 +1019,26 @@ function setupTools() {
   $('applyPixelBtn').addEventListener('click', applyPixelate);
   $('resetPixelBtn').addEventListener('click', resetPixelate);
 
-  // sprite
-  $('spriteCols').addEventListener('input', () => {
-    S.cols = Math.max(1, Math.min(64, +$('spriteCols').value || 1));
+  // sprite params
+  function onSpriteParamChange() {
+    S.cellW = Math.max(1, +$('cellW').value || 1);
+    S.cellH = Math.max(1, +$('cellH').value || 1);
+    S.gridCols = Math.max(1, +$('gridCols').value || 1);
+    S.gridRows = Math.max(1, +$('gridRows').value || 1);
+    S.sepX = Math.max(0, +$('sepX').value || 0);
+    S.sepY = Math.max(0, +$('sepY').value || 0);
+    S.offX = +$('offX').value || 0;
+    S.offY = +$('offY').value || 0;
     stopAnim();
     updateSpriteDim();
-    updateSpritePreview();
+    if (S.tab === 'sprite') updateSpritePreview();
     render();
+  }
+  ['cellW','cellH','gridCols','gridRows','sepX','sepY','offX','offY'].forEach(id => {
+    $(id).addEventListener('input', onSpriteParamChange);
   });
-  $('spriteRows').addEventListener('input', () => {
-    S.rows = Math.max(1, Math.min(64, +$('spriteRows').value || 1));
-    stopAnim();
-    updateSpriteDim();
-    updateSpritePreview();
-    render();
-  });
+  $('exportAllSpritesBtn').addEventListener('click', exportAllSprites);
+  $('exportSheetBtn').addEventListener('click', exportSpriteSheet);
 
   // animation controls
   $('playBtn').addEventListener('click', toggleAnim);
@@ -1403,76 +1428,141 @@ function resetPixelate() {
 // ============================================================
 //  Sprite preview
 // ============================================================
+
+/** Compute sprite grid layout from current params. Returns null if invalid. */
+function spriteGrid() {
+  if (!S.imgW || S.cellW < 1 || S.cellH < 1) return null;
+  return {
+    cols: S.gridCols, rows: S.gridRows,
+    cellW: S.cellW, cellH: S.cellH,
+    sepX: S.sepX, sepY: S.sepY,
+    offX: S.offX, offY: S.offY
+  };
+}
+
+/** Get source rect for cell (c, r). May exceed image bounds — caller must clip/pad. */
+function cellRect(g, c, r) {
+  const x = g.offX + c * (g.cellW + g.sepX);
+  const y = g.offY + r * (g.cellH + g.sepY);
+  return { x, y, w: g.cellW, h: g.cellH };
+}
+
+/** Extract a single sprite cell onto a canvas, padding with transparency if out of bounds. */
+function extractCell(g, c, r) {
+  const rect = cellRect(g, c, r);
+  const tc = document.createElement('canvas');
+  tc.width = g.cellW; tc.height = g.cellH;
+  const tctx = tc.getContext('2d');
+  // Compute the overlap between cell rect and image
+  const sx = Math.max(0, rect.x);
+  const sy = Math.max(0, rect.y);
+  const sx2 = Math.min(S.imgW, rect.x + rect.w);
+  const sy2 = Math.min(S.imgH, rect.y + rect.h);
+  const sw = sx2 - sx, sh = sy2 - sy;
+  if (sw > 0 && sh > 0) {
+    const dx = sx - rect.x, dy = sy - rect.y;
+    tctx.drawImage(workCanvas, sx, sy, sw, sh, dx, dy, sw, sh);
+  }
+  return tc;
+}
+
 function updateSpriteDim() {
-  if (!S.imgW) { $('spriteDim').textContent = '每格尺寸: -- x -- px'; return; }
-  const cw = Math.floor(S.imgW / S.cols);
-  const ch = Math.floor(S.imgH / S.rows);
-  $('spriteDim').textContent = '每格尺寸: ' + cw + ' x ' + ch + ' px';
+  const g = spriteGrid();
+  if (!g) { $('spriteDim').textContent = '网格: --'; return; }
+  const needW = g.offX + g.cols * g.cellW + (g.cols - 1) * g.sepX;
+  const needH = g.offY + g.rows * g.cellH + (g.rows - 1) * g.sepY;
+  let txt = '网格: ' + g.cols + ' x ' + g.rows + ' 帧 | 每帧 ' + g.cellW + ' x ' + g.cellH + ' px';
+  if (S.imgW && (needW > S.imgW || needH > S.imgH)) {
+    txt += ' | 需 ' + needW + 'x' + needH + ', 不足部分补透明';
+  }
+  $('spriteDim').textContent = txt;
 }
 
 function updateSpritePreview() {
   stopAnim();
   S.animFrame = 0;
-  const grid = $('spriteGrid');
-  grid.innerHTML = '';
-  if (!S.imgW) return;
+  const grid2 = $('spriteGrid');
+  grid2.innerHTML = '';
+  const g = spriteGrid();
+  if (!g) return;
 
-  const cols = S.cols, rows = S.rows;
-  const cellW = Math.floor(S.imgW / cols);
-  const cellH = Math.floor(S.imgH / rows);
-  if (cellW < 1 || cellH < 1) return;
+  const maxDisp = 80;
+  const scale = Math.max(1, Math.min(maxDisp / g.cellW, maxDisp / g.cellH));
+  const dispW = Math.round(g.cellW * scale);
+  const dispH = Math.round(g.cellH * scale);
 
-  // Decide display size for each sprite cell
-  const maxCellDisplay = 80;
-  const scale = Math.max(1, Math.min(maxCellDisplay / cellW, maxCellDisplay / cellH));
-  const dispW = Math.round(cellW * scale);
-  const dispH = Math.round(cellH * scale);
-
-  // Source canvas for extraction
-  const srcCanvas = workCanvas;
-
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
       const cell = document.createElement('div');
       cell.className = 'sprite-cell';
       cell.style.width = dispW + 'px';
       cell.style.height = dispH + 'px';
 
       const sc = document.createElement('canvas');
-      sc.width = dispW;
-      sc.height = dispH;
+      sc.width = dispW; sc.height = dispH;
       const sctx = sc.getContext('2d');
       sctx.imageSmoothingEnabled = false;
       if (S.bgColor) { sctx.fillStyle = S.bgColor; sctx.fillRect(0, 0, dispW, dispH); }
-      sctx.drawImage(srcCanvas, c * cellW, r * cellH, cellW, cellH, 0, 0, dispW, dispH);
+      const src = extractCell(g, c, r);
+      sctx.drawImage(src, 0, 0, g.cellW, g.cellH, 0, 0, dispW, dispH);
       sc.style.width = dispW + 'px';
       sc.style.height = dispH + 'px';
 
       cell.appendChild(sc);
-      cell.title = '行 ' + (r + 1) + ' 列 ' + (c + 1) + ' (' + cellW + 'x' + cellH + ')';
+      cell.title = '行 ' + (r + 1) + ' 列 ' + (c + 1);
       const ci = c, ri = r;
       cell.addEventListener('click', () => {
         stopAnim();
-        S.animFrame = ri * cols + ci;
+        S.animFrame = ri * g.cols + ci;
         renderAnimFrame();
       });
-      grid.appendChild(cell);
+      grid2.appendChild(cell);
     }
   }
-  $('spriteHeader').textContent = '精灵帧预览 (' + cols + 'x' + rows + ', 每格 ' + cellW + 'x' + cellH + ' px) — 点击帧可预览';
-
-  // Render first frame
+  $('spriteHeader').textContent = '精灵帧预览 (' + g.cols + 'x' + g.rows + ') — 点击帧可预览';
   renderAnimFrame();
 }
 
-function exportSprite(col, row, cellW, cellH) {
-  const tc = document.createElement('canvas');
-  tc.width = cellW;
-  tc.height = cellH;
-  const tctx = tc.getContext('2d');
-  tctx.drawImage(workCanvas, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+function exportSprite(c, r) {
+  const g = spriteGrid();
+  if (!g) return;
+  const tc = extractCell(g, c, r);
   const link = document.createElement('a');
-  link.download = 'sprite_r' + (row + 1) + '_c' + (col + 1) + '.png';
+  link.download = 'sprite_r' + (r + 1) + '_c' + (c + 1) + '.png';
+  link.href = tc.toDataURL('image/png');
+  link.click();
+}
+
+function exportAllSprites() {
+  const g = spriteGrid();
+  if (!g) return;
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
+      exportSprite(c, r);
+    }
+  }
+}
+
+function exportSpriteSheet() {
+  const g = spriteGrid();
+  if (!g) return;
+  const sheetW = g.cols * g.cellW + (g.cols - 1) * g.sepX;
+  const sheetH = g.rows * g.cellH + (g.rows - 1) * g.sepY;
+  const tc = document.createElement('canvas');
+  tc.width = sheetW;
+  tc.height = sheetH;
+  const tctx = tc.getContext('2d');
+  tctx.imageSmoothingEnabled = false;
+  for (let r = 0; r < g.rows; r++) {
+    for (let c = 0; c < g.cols; c++) {
+      const cell = extractCell(g, c, r);
+      const dx = c * (g.cellW + g.sepX);
+      const dy = r * (g.cellH + g.sepY);
+      tctx.drawImage(cell, dx, dy);
+    }
+  }
+  const link = document.createElement('a');
+  link.download = 'spritesheet_' + g.cols + 'x' + g.rows + '.png';
   link.href = tc.toDataURL('image/png');
   link.click();
 }
@@ -1480,7 +1570,10 @@ function exportSprite(col, row, cellW, cellH) {
 // ============================================================
 //  Animation playback
 // ============================================================
-function totalFrames() { return S.cols * S.rows; }
+function totalFrames() {
+  const g = spriteGrid();
+  return g ? g.cols * g.rows : 0;
+}
 
 function toggleAnim() {
   if (S.animPlaying) stopAnim(); else startAnim();
@@ -1508,40 +1601,31 @@ function animTick() {
 function stepFrame(dir) {
   if (!S.imgW) return;
   const t = totalFrames();
+  if (t < 1) return;
   S.animFrame = ((S.animFrame + dir) % t + t) % t;
   renderAnimFrame();
 }
 
 function renderAnimFrame() {
-  const cols = S.cols, rows = S.rows;
-  const cellW = Math.floor(S.imgW / cols);
-  const cellH = Math.floor(S.imgH / rows);
-  if (cellW < 1 || cellH < 1) return;
+  const g = spriteGrid();
+  if (!g) return;
 
-  const col = S.animFrame % cols;
-  const row = Math.floor(S.animFrame / cols);
+  const col = S.animFrame % g.cols;
+  const row = Math.floor(S.animFrame / g.cols);
 
-  // Draw to anim preview canvas
   const ac = $('animCanvas');
-  ac.width = cellW;
-  ac.height = cellH;
+  ac.width = g.cellW; ac.height = g.cellH;
   const actx = ac.getContext('2d');
   actx.imageSmoothingEnabled = false;
-  if (S.bgColor) {
-    actx.fillStyle = S.bgColor;
-    actx.fillRect(0, 0, cellW, cellH);
-  }
-  actx.drawImage(workCanvas, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+  if (S.bgColor) { actx.fillStyle = S.bgColor; actx.fillRect(0, 0, g.cellW, g.cellH); }
+  const src = extractCell(g, col, row);
+  actx.drawImage(src, 0, 0);
 
-  // Update frame info
   $('frameInfo').textContent = '帧: ' + (S.animFrame + 1) + '/' + totalFrames();
 
-  // Highlight active cell in grid
   document.querySelectorAll('.sprite-cell').forEach((el, i) => {
     el.classList.toggle('active', i === S.animFrame);
   });
-
-  // Scroll active cell into view
   const activeCell = document.querySelector('.sprite-cell.active');
   if (activeCell) activeCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
