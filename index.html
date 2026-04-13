@@ -377,11 +377,13 @@ footer span strong { color: var(--text); font-weight: 500; }
         <span>智能识别 (AI伪像素图)</span>
         <div class="toggle"><input type="checkbox" id="autoPixelToggle"><span class="toggle-slider"></span></div>
       </label>
-      <div id="manualPixelCtrl">
+      <!-- 手动模式控件 -->
+      <div id="pixelManualSection">
         <label>像素块大小 <span id="blockVal">8</span></label>
         <input type="range" id="blockSlider" min="2" max="64" value="8">
       </div>
-      <div id="autoPixelInfo" style="display:none">
+      <!-- 智能模式控件 -->
+      <div id="pixelAutoSection" style="display:none">
         <div class="auto-detect-result" id="autoDetectResult">加载图片后自动检测</div>
         <label style="margin-top:8px">采样方式
           <select id="sampleMethodSelect" style="margin-left:8px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:13px;font-family:var(--font)">
@@ -391,7 +393,12 @@ footer span strong { color: var(--text); font-weight: 500; }
           </select>
         </label>
       </div>
+      <!-- 共用控件 -->
       <div class="dim-display" id="pixelDim">结果尺寸: -- x -- px</div>
+      <div class="input-row">
+        <label>输出像素大小</label>
+        <input type="number" id="pixelScale" min="1" max="32" value="1"> px
+      </div>
       <div class="btn-row">
         <button class="btn btn-accent" id="applyPixelBtn">应用到图片</button>
         <button class="btn btn-secondary" id="resetPixelBtn">撤销</button>
@@ -477,6 +484,7 @@ const S = {
   sampleMethod: 'majority', // 'majority' | 'center' | 'median'
   prePixelData: null,    // ImageData snapshot before apply
   detectedGrid: null,    // PerfectPixel result cache
+  pixelScale: 1,         // output pixel size (1=true size)
   // sprite
   cols: 4, rows: 4,
   // animation
@@ -808,33 +816,37 @@ function setupTools() {
     S.pixelOn = e.target.checked;
     $('pixelBody').style.display = S.pixelOn ? '' : 'none';
     if (S.pixelOn && S.imgW) computePixel();
-    updatePixelDim();
-    render();
-  });
-  // block size slider (manual mode)
-  $('blockSlider').addEventListener('input', () => {
-    S.blockSize = +$('blockSlider').value;
-    $('blockVal').textContent = S.blockSize;
-    updatePixelDim();
-    if (S.pixelOn && !S.autoPixel && S.imgW) computePixel();
+    else render();
   });
   // auto/manual sub-toggle
   $('autoPixelToggle').addEventListener('change', e => {
     S.autoPixel = e.target.checked;
-    $('manualPixelCtrl').style.display = S.autoPixel ? 'none' : '';
-    $('autoPixelInfo').style.display = S.autoPixel ? '' : 'none';
+    syncPixelModeUI();
     S.detectedGrid = null;
     if (S.pixelOn && S.imgW) computePixel();
-    updatePixelDim();
-    render();
+    else { updatePixelDim(); render(); }
   });
-  $('applyPixelBtn').addEventListener('click', applyPixelate);
-  $('resetPixelBtn').addEventListener('click', resetPixelate);
+  // block size slider (manual only)
+  $('blockSlider').addEventListener('input', () => {
+    S.blockSize = +$('blockSlider').value;
+    $('blockVal').textContent = S.blockSize;
+    if (S.pixelOn && !S.autoPixel && S.imgW) computePixel();
+    else updatePixelDim();
+  });
+  // sample method (auto only)
   $('sampleMethodSelect').addEventListener('change', e => {
     S.sampleMethod = e.target.value;
     S.detectedGrid = null;
     if (S.pixelOn && S.autoPixel && S.imgW) computePixel();
   });
+  // output scale (both modes)
+  $('pixelScale').addEventListener('input', () => {
+    S.pixelScale = Math.max(1, Math.min(32, +$('pixelScale').value || 1));
+    if (S.pixelOn && S.imgW) computePixel();
+    else updatePixelDim();
+  });
+  $('applyPixelBtn').addEventListener('click', applyPixelate);
+  $('resetPixelBtn').addEventListener('click', resetPixelate);
 
   // sprite
   $('spriteCols').addEventListener('input', () => {
@@ -1109,13 +1121,25 @@ function restoreAt(cx, cy) {
 // ============================================================
 //  Pixel art
 // ============================================================
+
+/** Sync UI visibility to match current mode */
+function syncPixelModeUI() {
+  $('pixelManualSection').style.display = S.autoPixel ? 'none' : '';
+  $('pixelAutoSection').style.display = S.autoPixel ? '' : 'none';
+}
+
 function updatePixelDim() {
   if (!S.imgW) { $('pixelDim').textContent = '结果尺寸: -- x -- px'; return; }
+  let pw, ph;
   if (S.autoPixel && S.detectedGrid) {
-    $('pixelDim').textContent = '结果尺寸: ' + S.detectedGrid.width + ' x ' + S.detectedGrid.height + ' px';
+    pw = S.detectedGrid.width; ph = S.detectedGrid.height;
   } else if (!S.autoPixel) {
-    const pw = Math.ceil(S.imgW / S.blockSize);
-    const ph = Math.ceil(S.imgH / S.blockSize);
+    pw = Math.ceil(S.imgW / S.blockSize); ph = Math.ceil(S.imgH / S.blockSize);
+  } else { return; }
+  const s = S.pixelScale;
+  if (s > 1) {
+    $('pixelDim').textContent = '结果尺寸: ' + (pw * s) + ' x ' + (ph * s) + ' px (' + pw + 'x' + ph + ' @ ' + s + 'x)';
+  } else {
     $('pixelDim').textContent = '结果尺寸: ' + pw + ' x ' + ph + ' px';
   }
 }
@@ -1172,6 +1196,17 @@ function computePixel() {
       }
     }
     pixCtx.putImageData(dst, 0, 0);
+  }
+  // Scale up if pixelScale > 1
+  if (S.pixelScale > 1) {
+    const sw = pixCanvas.width, sh = pixCanvas.height;
+    const tmpC = document.createElement('canvas');
+    tmpC.width = sw; tmpC.height = sh;
+    tmpC.getContext('2d').drawImage(pixCanvas, 0, 0);
+    pixCanvas.width = sw * S.pixelScale;
+    pixCanvas.height = sh * S.pixelScale;
+    pixCtx.imageSmoothingEnabled = false;
+    pixCtx.drawImage(tmpC, 0, 0, pixCanvas.width, pixCanvas.height);
   }
   updatePixelDim();
   render();
